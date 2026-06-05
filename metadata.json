@@ -1,0 +1,6 @@
+{
+  "name": "Tutoring Association Portal",
+  "description": "An interactive digital hub for tutoring associations. Students can log in to view private worksheets/study guides uploaded by tutors, schedule or cancel tutoring appointments, watch recordings of previous test-prep video sessions, track academic progress metrics, and message tutors in direct real-time chats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

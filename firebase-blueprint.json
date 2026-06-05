@@ -1,0 +1,265 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user profile in the tutoring association, such as a student or a tutor.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The unique Firebase Auth UID of the user."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "tutor"],
+          "description": "The role of the user."
+        },
+        "grade": {
+          "type": "string",
+          "description": "The educational grade of the student user (if role is student)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the profile was created."
+        }
+      },
+      "required": ["userId", "name", "email", "role", "createdAt"]
+    },
+    "StudyMaterial": {
+      "title": "StudyMaterial",
+      "description": "Private files and study material uploaded by a tutor for students.",
+      "type": "object",
+      "properties": {
+        "materialId": {
+          "type": "string",
+          "description": "The unique ID of the study material."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the study material."
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the study material contents."
+        },
+        "subject": {
+          "type": "string",
+          "description": "The academic subject of the material."
+        },
+        "fileUrl": {
+          "type": "string",
+          "description": "The URL to download the private study material."
+        },
+        "fileType": {
+          "type": "string",
+          "enum": ["pdf", "doc", "zip", "link"],
+          "description": "The file classification format."
+        },
+        "uploadedBy": {
+          "type": "string",
+          "description": "The foreign key UID of the tutor who uploaded it."
+        },
+        "uploadedByName": {
+          "type": "string",
+          "description": "The name of the tutor who uploaded it."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The creation timestamp."
+        }
+      },
+      "required": ["materialId", "title", "subject", "fileUrl", "fileType", "uploadedBy", "createdAt"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "A booking between a student and a tutor.",
+      "type": "object",
+      "properties": {
+        "appointmentId": {
+          "type": "string"
+        },
+        "studentId": {
+          "type": "string",
+          "description": "The student user UID."
+        },
+        "studentName": {
+          "type": "string"
+        },
+        "tutorId": {
+          "type": "string",
+          "description": "The tutor user UID."
+        },
+        "tutorName": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "description": "Scheduled date formatted as YYYY-MM-DD."
+        },
+        "time": {
+          "type": "string",
+          "description": "Scheduled time formatted as HH:MM."
+        },
+        "subject": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["scheduled", "cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cancelledAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["appointmentId", "studentId", "studentName", "tutorId", "tutorName", "date", "time", "subject", "status", "createdAt"]
+    },
+    "SessionVideo": {
+      "title": "SessionVideo",
+      "description": "Recording of previous virtual tutoring sessions.",
+      "type": "object",
+      "properties": {
+        "videoId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "videoUrl": {
+          "type": "string",
+          "description": "Shared video playback URL (e.g., YouTube embed or mock link)."
+        },
+        "duration": {
+          "type": "string",
+          "description": "Estimated duration formatted as mm:ss or hh:mm."
+        },
+        "dateRecorded": {
+          "type": "string",
+          "description": "The date the session occurred."
+        },
+        "studentId": {
+          "type": "string",
+          "description": "UID of the student allowed to see this video, or 'all'."
+        },
+        "tutorName": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["videoId", "title", "subject", "videoUrl", "dateRecorded", "studentId", "tutorName", "createdAt"]
+    },
+    "ProgressMetric": {
+      "title": "ProgressMetric",
+      "description": "Syllabus metrics and test performance metrics.",
+      "type": "object",
+      "properties": {
+        "metricId": {
+          "type": "string",
+          "description": "Unique record ID (usually student ID for high-level student records)."
+        },
+        "studentId": {
+          "type": "string"
+        },
+        "hoursCompleted": {
+          "type": "number"
+        },
+        "syllabusCoverage": {
+          "type": "number",
+          "description": "Percentage progress integer 0-100."
+        },
+        "assignmentsCompleted": {
+          "type": "number"
+        },
+        "totalAssignments": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["metricId", "studentId", "hoursCompleted", "syllabusCoverage", "assignmentsCompleted", "totalAssignments", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Messaging logs between dynamic student accounts and tutor accounts.",
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text literal of message body."
+        },
+        "senderId": {
+          "type": "string"
+        },
+        "senderName": {
+          "type": "string"
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["student", "tutor"]
+        },
+        "receiverId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["messageId", "text", "senderId", "senderName", "senderRole", "receiverId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for both students and tutors."
+    },
+    "study-materials/{materialId}": {
+      "schema": "StudyMaterial",
+      "description": "Study guidelines, worksheets and textbooks uploaded by high-credential tutors."
+    },
+    "appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Tutoring appointments bookings and cancellation listings."
+    },
+    "session-videos/{videoId}": {
+      "schema": "SessionVideo",
+      "description": "Recorded session videos."
+    },
+    "progress-metrics/{metricId}": {
+      "schema": "ProgressMetric",
+      "description": "Academic progress tracking records."
+    },
+    "chat-messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Direct conversation histories between students and tutors."
+    }
+  }
+}

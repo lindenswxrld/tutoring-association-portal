@@ -1,0 +1,158 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net default catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Phase 3: Primitive Global Security Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isTutor() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getRole() == 'tutor';
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() 
+        && isOwner(userId) 
+        && isValidId(userId)
+        && incoming().userId == userId
+        && incoming().email == request.auth.token.email
+        && incoming().role in ['student', 'tutor']
+        && incoming().name is string
+        && incoming().name.size() <= 200
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn() 
+        && isOwner(userId)
+        && incoming().userId == userId
+        && incoming().email == existing().email
+        && incoming().role == existing().role
+        && incoming().name is string
+        && incoming().name.size() <= 200
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'grade', 'avatarUrl']) || incoming().diff(existing()).affectedKeys().hasOnly([]));
+      allow delete: if false;
+    }
+
+    // 2. Study Materials
+    match /study-materials/{materialId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isValidId(materialId)
+        && isTutor()
+        && incoming().materialId == materialId
+        && incoming().uploadedBy == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().subject is string && incoming().subject.size() <= 100
+        && incoming().fileType in ['pdf', 'doc', 'zip', 'link']
+        && incoming().fileUrl is string && incoming().fileUrl.size() <= 500
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn()
+        && isTutor()
+        && existing().uploadedBy == request.auth.uid
+        && incoming().uploadedBy == existing().uploadedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().subject is string && incoming().subject.size() <= 100
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'fileUrl', 'fileType', 'subject']) || incoming().diff(existing()).affectedKeys().hasOnly([]));
+      allow delete: if isSignedIn()
+        && isTutor()
+        && existing().uploadedBy == request.auth.uid;
+    }
+
+    // 3. Appointments
+    match /appointments/{appointmentId} {
+      allow get, list: if isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.tutorId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(appointmentId)
+        && (incoming().studentId == request.auth.uid || isTutor())
+        && incoming().appointmentId == appointmentId
+        && incoming().studentId is string && incoming().studentId.size() <= 128
+        && incoming().tutorId is string && incoming().tutorId.size() <= 128
+        && incoming().subject is string && incoming().subject.size() <= 100
+        && incoming().status == 'scheduled'
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn()
+        && (existing().studentId == request.auth.uid || existing().tutorId == request.auth.uid)
+        && (
+          // Action 1: Cancel booking (Both student and tutor can trigger)
+          (incoming().status == 'cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledAt'])) ||
+          // Action 2: Change scheduling (Only tutor can rearrange dates)
+          (isTutor() && (incoming().diff(existing()).affectedKeys().hasOnly(['date', 'time', 'subject', 'status'])))
+        );
+      allow delete: if false;
+    }
+
+    // 4. Session Videos
+    match /session-videos/{videoId} {
+      allow read: if isSignedIn() && (resource.data.studentId == request.auth.uid || resource.data.studentId == 'all');
+      allow create: if isSignedIn()
+        && isValidId(videoId)
+        && isTutor()
+        && incoming().videoId == videoId
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().videoUrl is string && incoming().videoUrl.size() <= 500
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn()
+        && isTutor()
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'videoUrl', 'duration', 'dateRecorded', 'studentId']) || incoming().diff(existing()).affectedKeys().hasOnly([]));
+      allow delete: if isSignedIn() && isTutor();
+    }
+
+    // 5. Progress Metrics
+    match /progress-metrics/{metricId} {
+      allow read: if isSignedIn() && (resource.data.studentId == request.auth.uid || isTutor());
+      allow create: if isSignedIn()
+        && isValidId(metricId)
+        && isTutor()
+        && incoming().metricId == metricId
+        && incoming().studentId == metricId
+        && incoming().hoursCompleted is number
+        && incoming().syllabusCoverage is number
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isTutor()
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['hoursCompleted', 'syllabusCoverage', 'assignmentsCompleted', 'totalAssignments', 'updatedAt']) || incoming().diff(existing()).affectedKeys().hasOnly([]));
+      allow delete: if false;
+    }
+
+    // 6. Chat Messages
+    match /chat-messages/{messageId} {
+      allow read: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn()
+        && isValidId(messageId)
+        && incoming().messageId == messageId
+        && incoming().senderId == request.auth.uid
+        && incoming().text is string && incoming().text.size() <= 2000
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
