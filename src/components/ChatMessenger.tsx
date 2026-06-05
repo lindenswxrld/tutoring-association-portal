@@ -10,9 +10,10 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { ChatMessage, AppUser } from '../types';
 import { Send, User, MessageSquare, ShieldCheck, Sparkles, PlusCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { mockDb } from '../lib/mockDb';
 
 export const ChatMessenger: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isDemoMode } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [partners, setPartners] = useState<AppUser[]>([]);
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
@@ -26,6 +27,39 @@ export const ChatMessenger: React.FC = () => {
   // 1. Fetch available chat partners
   useEffect(() => {
     if (!currentUser) return;
+
+    if (isDemoMode) {
+      if (currentUser.role === 'student') {
+        const list: AppUser[] = [
+          {
+            userId: 'demo_tutor_uid',
+            name: 'Dr. Sarah Peterson',
+            email: 'sarah.peterson@demo-association.org',
+            role: 'tutor',
+            createdAt: new Date().toISOString(),
+            avatarUrl: 'https://api.dicebear.com/7.x/adventurer/svg?seed=sarah'
+          }
+        ];
+        setPartners(list);
+        setActivePartnerId('demo_tutor_uid');
+      } else {
+        const list: AppUser[] = [
+          {
+            userId: 'demo_student_uid',
+            name: 'Alex Sandbox Student',
+            email: 'alex.scholar@demo-association.org',
+            role: 'student',
+            grade: 'Grade 11',
+            createdAt: new Date().toISOString(),
+            avatarUrl: 'https://api.dicebear.com/7.x/adventurer/svg?seed=alex'
+          }
+        ];
+        setPartners(list);
+        setActivePartnerId('demo_student_uid');
+      }
+      setLoading(false);
+      return;
+    }
 
     const fetchPartners = async () => {
       try {
@@ -61,11 +95,23 @@ export const ChatMessenger: React.FC = () => {
     };
 
     fetchPartners();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   // 2. Subscribe to real-time chat messages
   useEffect(() => {
     if (!currentUser) return;
+
+    if (isDemoMode) {
+      const loadMessages = () => {
+        setMessages(mockDb.getMessages());
+        setLoading(false);
+      };
+      loadMessages();
+      window.addEventListener('mock_db_update', loadMessages);
+      return () => {
+        window.removeEventListener('mock_db_update', loadMessages);
+      };
+    }
 
     const q = query(
       collection(db, 'chat-messages'),
@@ -84,7 +130,7 @@ export const ChatMessenger: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   // 3. Scroll to the bottom
   useEffect(() => {
@@ -98,6 +144,22 @@ export const ChatMessenger: React.FC = () => {
     setSending(true);
     const messageId = `msg_${Date.now()}`;
     const path = `chat-messages/${messageId}`;
+
+    if (isDemoMode) {
+      const payload: ChatMessage = {
+        messageId,
+        text: inputText.trim(),
+        senderId: currentUser.userId,
+        senderName: currentUser.name,
+        senderRole: currentUser.role,
+        receiverId: activePartnerId,
+        createdAt: new Date().toISOString()
+      };
+      mockDb.saveMessage(payload);
+      setInputText('');
+      setSending(false);
+      return;
+    }
 
     try {
       const payload: ChatMessage = {

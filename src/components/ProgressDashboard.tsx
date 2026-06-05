@@ -10,6 +10,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { ProgressMetric, AppUser } from '../types';
 import { Award, BookOpen, Clock, FileText, CheckCircle2, ChevronRight, RefreshCw, PenTool, TrendingUp, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
+import { mockDb } from '../lib/mockDb';
 
 interface MockScore {
   subject: string;
@@ -19,7 +20,7 @@ interface MockScore {
 }
 
 export const ProgressDashboard: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isDemoMode } = useAuth();
   const [metric, setMetric] = useState<ProgressMetric | null>(null);
   const [allMetrics, setAllMetrics] = useState<ProgressMetric[]>([]);
   const [students, setStudents] = useState<AppUser[]>([]);
@@ -48,6 +49,22 @@ export const ProgressDashboard: React.FC = () => {
   useEffect(() => {
     if (currentUser?.role !== 'tutor') return;
 
+    if (isDemoMode) {
+      const list = [
+        {
+          userId: 'demo_student_uid',
+          name: 'Alex Sandbox Student',
+          email: 'alex.scholar@demo-association.org',
+          role: 'student',
+          grade: 'Grade 11',
+          createdAt: new Date().toISOString()
+        }
+      ];
+      setStudents(list as any);
+      setSelectedStudentId('demo_student_uid');
+      return;
+    }
+
     const fetchStudents = async () => {
       try {
         const snap = await getDocs(query(collection(db, 'users')));
@@ -65,10 +82,21 @@ export const ProgressDashboard: React.FC = () => {
       }
     };
     fetchStudents();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   // Load all progress metrics for real-time overview
   useEffect(() => {
+    if (isDemoMode) {
+      const loadAllMetrics = () => {
+        setAllMetrics(mockDb.getMetrics());
+      };
+      loadAllMetrics();
+      window.addEventListener('mock_db_update', loadAllMetrics);
+      return () => {
+        window.removeEventListener('mock_db_update', loadAllMetrics);
+      };
+    }
+
     const q = query(collection(db, 'progress-metrics'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: ProgressMetric[] = [];
@@ -78,7 +106,7 @@ export const ProgressDashboard: React.FC = () => {
       setAllMetrics(list);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isDemoMode]);
 
   // Listen to active student or current student metric
   useEffect(() => {
@@ -87,6 +115,31 @@ export const ProgressDashboard: React.FC = () => {
     if (!targetId) {
       setLoading(false);
       return;
+    }
+
+    if (isDemoMode) {
+      const loadActiveMetric = () => {
+        const data = mockDb.getMetric(targetId);
+        if (data) {
+          setMetric(data);
+          setEditHours(data.hoursCompleted);
+          setEditSyllabus(data.syllabusCoverage);
+          setEditCompleted(data.assignmentsCompleted);
+          setEditTotal(data.totalAssignments);
+        } else {
+          setMetric(null);
+          setEditHours(0);
+          setEditSyllabus(0);
+          setEditCompleted(0);
+          setEditTotal(0);
+        }
+        setLoading(false);
+      };
+      loadActiveMetric();
+      window.addEventListener('mock_db_update', loadActiveMetric);
+      return () => {
+        window.removeEventListener('mock_db_update', loadActiveMetric);
+      };
     }
 
     setLoading(true);
@@ -112,7 +165,7 @@ export const ProgressDashboard: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [currentUser, selectedStudentId]);
+  }, [currentUser, selectedStudentId, isDemoMode]);
 
   const handleUpdateMetrics = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +174,21 @@ export const ProgressDashboard: React.FC = () => {
 
     setSaving(true);
     const path = `progress-metrics/${targetId}`;
+
+    if (isDemoMode) {
+      const payload: ProgressMetric = {
+        metricId: targetId,
+        studentId: targetId,
+        hoursCompleted: Number(editHours),
+        syllabusCoverage: Number(editSyllabus),
+        assignmentsCompleted: Number(editCompleted),
+        totalAssignments: Number(editTotal),
+        updatedAt: new Date().toISOString()
+      };
+      mockDb.saveMetric(payload);
+      setSaving(false);
+      return;
+    }
 
     try {
       const payload: ProgressMetric = {

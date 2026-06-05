@@ -10,9 +10,10 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { SessionVideo, AppUser } from '../types';
 import { Play, Video, Plus, Search, Trash2, Clock, Calendar, ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { mockDb } from '../lib/mockDb';
 
 export const VideoArchive: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isDemoMode } = useAuth();
   const [videos, setVideos] = useState<SessionVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentsList, setStudentsList] = useState<AppUser[]>([]);
@@ -38,6 +39,18 @@ export const VideoArchive: React.FC = () => {
 
   // Subscribe to videos list
   useEffect(() => {
+    if (isDemoMode) {
+      const loadVids = () => {
+        setVideos(mockDb.getVideos());
+        setLoading(false);
+      };
+      loadVids();
+      window.addEventListener('mock_db_update', loadVids);
+      return () => {
+        window.removeEventListener('mock_db_update', loadVids);
+      };
+    }
+
     const q = query(collection(db, 'session-videos'), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -52,11 +65,27 @@ export const VideoArchive: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isDemoMode]);
 
   // Fetch list of students for private assignment selection
   useEffect(() => {
     if (currentUser?.role !== 'tutor') return;
+
+    if (isDemoMode) {
+      const list = [
+        {
+          userId: 'demo_student_uid',
+          name: 'Alex Sandbox Student',
+          email: 'alex.scholar@demo-association.org',
+          role: 'student',
+          grade: 'Grade 11',
+          createdAt: new Date().toISOString()
+        }
+      ];
+      setStudentsList(list as any);
+      return;
+    }
+
     const fetchStudents = async () => {
       try {
         const querySnap = await getDocs(query(collection(db, 'users')));
@@ -73,7 +102,7 @@ export const VideoArchive: React.FC = () => {
       }
     };
     fetchStudents();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   const handleCreateVideo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +125,28 @@ export const VideoArchive: React.FC = () => {
       if (parts.length > 1) {
         formattedUrl = `https://www.youtube.com/embed/${parts[1].split('?')[0]}`;
       }
+    }
+
+    if (isDemoMode) {
+      const payload: SessionVideo = {
+        videoId,
+        title: newTitle,
+        description: newDesc,
+        subject: newSubject,
+        videoUrl: formattedUrl,
+        duration: newDuration,
+        dateRecorded: newDateRecorded,
+        studentId: newStudentId,
+        tutorName: currentUser.name,
+        createdAt: new Date().toISOString()
+      };
+      mockDb.saveVideo(payload);
+      setNewTitle('');
+      setNewDesc('');
+      setNewVideoUrl('');
+      setShowForm(false);
+      setSubmitting(false);
+      return;
     }
 
     try {
@@ -126,6 +177,12 @@ export const VideoArchive: React.FC = () => {
 
   const handleDeleteVideo = async (videoId: string) => {
     if (!window.confirm("Delete this recording from the archive?")) return;
+
+    if (isDemoMode) {
+      mockDb.deleteVideo(videoId);
+      return;
+    }
+
     const path = `session-videos/${videoId}`;
     try {
       await deleteDoc(doc(db, 'session-videos', videoId));

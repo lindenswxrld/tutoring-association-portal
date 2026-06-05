@@ -10,9 +10,10 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Appointment, AppUser } from '../types';
 import { Calendar as CalendarIcon, Clock, XCircle, Plus, AlertCircle, BookOpen, Check, HelpCircle, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
+import { mockDb } from '../lib/mockDb';
 
 export const Appointments: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isDemoMode } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [tutorsList, setTutorsList] = useState<AppUser[]>([]);
@@ -42,6 +43,26 @@ export const Appointments: React.FC = () => {
   // Load appointments
   useEffect(() => {
     if (!currentUser) return;
+
+    if (isDemoMode) {
+      const loadAppts = () => {
+        const all = mockDb.getAppointments();
+        const filtered = all.filter(a => {
+          if (currentUser.role === 'student') {
+            return a.studentId === currentUser.userId;
+          } else {
+            return a.tutorId === currentUser.userId;
+          }
+        });
+        setAppointments(filtered);
+        setLoading(false);
+      };
+      loadAppts();
+      window.addEventListener('mock_db_update', loadAppts);
+      return () => {
+        window.removeEventListener('mock_db_update', loadAppts);
+      };
+    }
 
     let q = query(
       collection(db, 'appointments'),
@@ -74,11 +95,26 @@ export const Appointments: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   // Load tutors for student booking dropdown
   useEffect(() => {
     if (currentUser?.role !== 'student') return;
+
+    if (isDemoMode) {
+      const list = [
+        {
+          userId: 'demo_tutor_uid',
+          name: 'Dr. Sarah Peterson (Mathematics & Physics Lead)',
+          email: 'sarah.peterson@demo-association.org',
+          role: 'tutor',
+          createdAt: new Date().toISOString()
+        }
+      ];
+      setTutorsList(list as any);
+      setFormData(prev => ({ ...prev, tutorId: 'demo_tutor_uid' }));
+      return;
+    }
 
     const fetchTutors = async () => {
       try {
@@ -108,7 +144,7 @@ export const Appointments: React.FC = () => {
     };
 
     fetchTutors();
-  }, [currentUser]);
+  }, [currentUser, isDemoMode]);
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,9 +153,34 @@ export const Appointments: React.FC = () => {
     setSubmitting(true);
     const appointmentId = `appt_${Date.now()}`;
     const selectedTutorObj = tutorsList.find(t => t.userId === formData.tutorId);
-    const tutorName = selectedTutorObj ? selectedTutorObj.name : 'Lead Tutor Peterson';
+    const tutorName = selectedTutorObj ? selectedTutorObj.name : 'Dr. Sarah Peterson';
 
-    const tutorId = formData.tutorId || 'fallback_tutor_1';
+    const tutorId = formData.tutorId || 'demo_tutor_uid';
+
+    if (isDemoMode) {
+      const payload: Appointment = {
+        appointmentId,
+        studentId: currentUser.userId,
+        studentName: currentUser.name,
+        tutorId,
+        tutorName,
+        date: formData.date,
+        time: formData.time,
+        subject: formData.subject,
+        status: 'scheduled',
+        createdAt: new Date().toISOString()
+      };
+      mockDb.saveAppointment(payload);
+      setShowBookingForm(false);
+      setFormData({
+        tutorId: 'demo_tutor_uid',
+        date: '',
+        time: '',
+        subject: 'Mathematics'
+      });
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const payload: Appointment = {
@@ -152,6 +213,15 @@ export const Appointments: React.FC = () => {
 
   const handleCancel = async (apptId: string) => {
     if (!window.confirm("Are you sure you want to cancel this tutoring appointment?")) return;
+    
+    if (isDemoMode) {
+      mockDb.updateAppointment(apptId, {
+        status: 'cancelled',
+        cancelledAt: new Date().toISOString()
+      });
+      return;
+    }
+
     const path = `appointments/${apptId}`;
     try {
       await updateDoc(doc(db, 'appointments', apptId), {
@@ -165,6 +235,16 @@ export const Appointments: React.FC = () => {
 
   const handleReschedule = async (apptId: string) => {
     if (!rescheduleData.date || !rescheduleData.time) return;
+
+    if (isDemoMode) {
+      mockDb.updateAppointment(apptId, {
+        date: rescheduleData.date,
+        time: rescheduleData.time
+      });
+      setReschedulingId(null);
+      return;
+    }
+
     const path = `appointments/${apptId}`;
     try {
       await updateDoc(doc(db, 'appointments', apptId), {
